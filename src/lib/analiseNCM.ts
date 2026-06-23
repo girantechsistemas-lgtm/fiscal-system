@@ -1248,49 +1248,120 @@ export function calcularEconomiaAnual(economiaMensal: number): number {
 }
 
 // =============================================================================
-// FUNÇÃO DE SUGESTÃO DE NCM ALTERNATIVO
+// SISTEMA DE ANÁLISE BASEADO NO NOME DO PRODUTO
 // =============================================================================
 
 /**
- * Mapeamento de subcategorias por posição NCM (4 dígitos).
- * Usado para impedir trocas entre categorias incompatíveis.
+ * Mapeamento de PALAVRAS-CHAVE do nome do produto → NCM correto.
+ * O sistema analisa o nome e identifica automaticamente o tipo de produto.
  */
-const SUBCATEGORIAS: Record<string, string> = {
-  // Capítulo 22 - Bebidas
-  "2201": "agua_mineral",
-  "2202": "agua_refrigerante",
-  "2203": "cerveja",
-  "2204": "vinho",
-  "2205": "vermute",
-  "2206": "outras_fermentadas",
-  "2207": "alcool",
-  "2208": "destilados",
-  // Capítulo 02 - Carnes
-  "0201": "carne_bovina",
-  "0202": "carne_bovina_congelada",
-  "0203": "carne_suina",
-  "0204": "carne_cordeiro",
-  "0207": "aves",
-  // Capítulo 04 - Laticínios
-  "0401": "leite",
-  "0402": "leite_po",
-  "0403": "iogurte",
-  "0405": "manteiga",
-  "0406": "queijo",
-  // Capítulo 09 - Café/Chá
-  "0901": "cafe",
-  "0902": "cha",
-  // Capítulo 15 - Óleos
-  "1509": "azeite",
-  "1511": "oleo_soja",
-  "1517": "margarina",
-  // Capítulo 34 - Limpeza
-  "3401": "sabao",
-  "3402": "detergente",
-};
+interface RegraNCM {
+  palavras: string[];
+  ncm: string;
+  descricao: string;
+  categoria: string;
+}
+
+const REGRAS_POR_NOME: RegraNCM[] = [
+  // === BEBIDAS ALCOÓLICAS ===
+  { palavras: ["CONHAQUE", "COGNAC", "BRANDY"], ncm: "22082000", descricao: "Aguardantes de vinho ou bagaceira", categoria: "destilado" },
+  { palavras: ["VODKA"], ncm: "22086000", descricao: "Vodka", categoria: "destilado" },
+  { palavras: ["GIN", "GIM"], ncm: "22085000", descricao: "Gim e genebra", categoria: "destilado" },
+  { palavras: ["WHISKY", "UISQUE", "SCOTCH"], ncm: "22083020", descricao: "Uísque de outros", categoria: "destilado" },
+  { palavras: ["RUM"], ncm: "22084000", descricao: "Rum e aguardentes de cana", categoria: "destilado" },
+  { palavras: ["LICOR", "LIQUOR"], ncm: "22087000", descricao: "Licores", categoria: "destilado" },
+  { palavras: ["CACHACA", "CACHAÇA", "BAGACEIRA"], ncm: "22082000", descricao: "Aguardantes de vinho ou bagaceira", categoria: "destilado" },
+  { palavras: ["TEQUILA"], ncm: "22089000", descricao: "Outras bebidas destiladas", categoria: "destilado" },
+  { palavras: ["SAKE"], ncm: "22060010", descricao: "Licores e outras bebidas fermentadas", categoria: "fermentada" },
+
+  // === CERVEJAS ===
+  { palavras: ["CERVEJA", "CHOPP", "LAGER", "PILSEN", "IPA", "STOUT", "WHEAT"], ncm: "22030000", descricao: "Cerveja de malte", categoria: "cerveja" },
+  { palavras: ["EISENBAHN", "SKOL", "BRAHMA", "ANTARCTICA", "HEINEKEN", "CORONA", "STELLA"], ncm: "22030000", descricao: "Cerveja de malte", categoria: "cerveja" },
+
+  // === VINHOS ===
+  { palavras: ["VINHO", "TAJNA", "SANGRIA"], ncm: "22042100", descricao: "Vinhos em recipientes <= 2L", categoria: "vinho" },
+
+  // === BEBIDAS NÃO ALCOÓLICAS ===
+  { palavras: ["AGUA MINERAL", "AGUA S/GAS", "AGUA C/GAS"], ncm: "22011000", descricao: "Águas minerais", categoria: "agua" },
+  { palavras: ["AGUA TONICA", "TONICA"], ncm: "22021000", descricao: "Águas com gás artificial", categoria: "refrigerante" },
+  { palavras: ["REFRIGERANTE", "COCACOLA", "GUARANA", "FANTA", "SPRITE"], ncm: "22029100", descricao: "Refrigerantes", categoria: "refrigerante" },
+  { palavras: ["SUCO", "NECTAR"], ncm: "20098900", descricao: "Outros sumos de frutas", categoria: "suco" },
+  { palavras: ["ENERGETICO", "ENERGÉTICO", "MONSTER", "RED BULL"], ncm: "21069010", descricao: "Pré-misturas para bebidas", categoria: "energetico" },
+  { palavras: ["CITRUS"], ncm: "20098900", descricao: "Outros sumos de frutas", categoria: "suco" },
+
+  // === CAFÉ E CHÁ ===
+  { palavras: ["CAFE", "CAFÉ"], ncm: "09011200", descricao: "Café torrado e moído", categoria: "cafe" },
+  { palavras: ["CHA", "CHÁ"], ncm: "09022000", descricao: "Outros chás", categoria: "cha" },
+
+  // === LATICÍNIOS ===
+  { palavras: ["LEITE"], ncm: "04012000", descricao: "Leite fresco", categoria: "leite" },
+  { palavras: ["IOGURTE", "IOGURTE"], ncm: "04031000", descricao: "Iogurte", categoria: "iogurte" },
+  { palavras: ["QUEIJO", "MUSSARELA", "PARMESAO", "PRATO"], ncm: "04061000", descricao: "Queijo fresco", categoria: "queijo" },
+  { palavras: ["MANTEIGA"], ncm: "04051000", descricao: "Manteiga", categoria: "manteiga" },
+
+  // === CARNES ===
+  { palavras: ["CARNE BOVINA", "BIFE", "PICOANHO", "ACEM", "ALCATRA"], ncm: "02012000", descricao: "Carne bovina fresca", categoria: "carne_bovina" },
+  { palavras: ["FRANGO", "PEITO DE FRANGO", "COXA"], ncm: "02071300", descricao: "Carnes de aves frescas", categoria: "aves" },
+  { palavras: ["PORCO", "SUINO", "LOMBO", "COSTELA"], ncm: "02031100", descricao: "Carne suína fresca", categoria: "carne_suina" },
+
+  // === ÓLEOS E GORDURAS ===
+  { palavras: ["OLEO DE SOJA", "OLEO"], ncm: "15111000", descricao: "Óleo de soja refinado", categoria: "oleo" },
+  { palavras: ["AZEITE"], ncm: "15091000", descricao: "Azeite de oliva virgem", categoria: "azeite" },
+  { palavras: ["MARGARINA"], ncm: "15171000", descricao: "Margarina", categoria: "margarina" },
+
+  // === AÇÚCAR E FARDINHA ===
+  { palavras: ["ACUCAR", "AÇÚCAR"], ncm: "17019100", descricao: "Açúcar refinado", categoria: "acucar" },
+  { palavras: ["FARINHA DE TRIGO", "FARINHA"], ncm: "11010010", descricao: "Farinha de trigo", categoria: "farinha" },
+  { palavras: ["MASSA", "MACARRAO", "ESPAGUETE"], ncm: "19021900", descricao: "Outras massas", categoria: "massa" },
+
+  // === LIMPEZA ===
+  { palavras: ["DETERGENTE", "SABAO", "SABÃO"], ncm: "34022000", descricao: "Detergentes", categoria: "limpeza" },
+  { palavras: ["DESINFETANTE"], ncm: "34022000", descricao: "Detergentes", categoria: "limpeza" },
+  { palavras: ["AGUA SANITARIA"], ncm: "34011900", descricao: "Sabões e detergentes", categoria: "limpeza" },
+  { palavras: ["BOMBRIL", "LAVA LOUCAS"], ncm: "34029010", descricao: "Outros detergentes", categoria: "limpeza" },
+
+  // === EMBALAGENS ===
+  { palavras: ["SACOLA", "SACO"], ncm: "39232900", descricao: "Outros sacos de plástico", categoria: "embalagem" },
+  { palavras: ["CAIXA DE PAPELÃO", "CAIXA"], ncm: "48191000", descricao: "Caixas de cartão ondulado", categoria: "embalagem" },
+  { palavras: ["COPO DE PLASTICO", "COPO"], ncm: "39241000", descricao: "Artigos para serviço de mesa", categoria: "embalagem" },
+  { palavras: ["PRATO DE PLASTICO", "TRAVESSA"], ncm: "39241000", descricao: "Artigos para serviço de mesa", categoria: "embalagem" },
+  { palavras: ["TALHER", "FACA", "GARFO", "COLHER"], ncm: "73239300", descricao: "Artigos de mesa de aço", categoria: "talher" },
+
+  // === PRODUTOS GENÉRICOS ===
+  { palavras: ["DOSE"], ncm: "22089000", descricao: "Outras bebidas destiladas", categoria: "destilado" },
+  { palavras: ["GARRAFA"], ncm: "22089000", descricao: "Outras bebidas destiladas", categoria: "destilado" },
+];
 
 /**
- * Verifica se um produto é um combo/kit (múltiplos itens).
+ * Analisa o nome do produto e retorna o NCM sugerido.
+ *
+ * @param nomeProduto - Nome do produto
+ * @returns Objeto com NCM sugerido e informações, ou null se não identificar
+ */
+export function identificarNCMPorNome(nomeProduto: string): {
+  ncm: string;
+  descricao: string;
+  categoria: string;
+} | null {
+  const nomeUpper = nomeProduto.toUpperCase();
+
+  for (const regra of REGRAS_POR_NOME) {
+    for (const palavra of regra.palavras) {
+      if (nomeUpper.includes(palavra)) {
+        return {
+          ncm: regra.ncm,
+          descricao: regra.descricao,
+          categoria: regra.categoria,
+        };
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Verifica se um produto é um combo/kit.
  */
 function ehCombo(nomeProduto: string, grupoProduto: string): boolean {
   const nomeUpper = nomeProduto.toUpperCase();
@@ -1309,139 +1380,105 @@ function ehCombo(nomeProduto: string, grupoProduto: string): boolean {
 }
 
 /**
- * Obtém a subcategoria de um NCM pela posição (4 dígitos).
+ * Busca NCMs na mesma categoria com menor imposto.
  */
-function obterSubcategoria(ncm: string): string | null {
-  const posicao = ncm.substring(0, 4);
-  return SUBCATEGORIAS[posicao] || null;
+function buscarNCMsNaMesmaCategoria(categoria: string, ncmAtual: string): NCMEntrada[] {
+  const candidatos: NCMEntrada[] = [];
+
+  for (const regra of REGRAS_POR_NOME) {
+    if (regra.categoria === categoria && regra.ncm !== ncmAtual) {
+      const ncmInfo = buscarNCMporCodigo(regra.ncm);
+      if (ncmInfo) {
+        candidatos.push(ncmInfo);
+      }
+    }
+  }
+
+  return candidatos;
 }
 
 /**
- * Verifica se dois NCMs são da mesma subcategoria exata.
- * Retorna true apenas se ambos pertencem à mesma subcategoria.
- */
-function mesmaSubcategoria(ncm1: string, ncm2: string): boolean {
-  const sub1 = obterSubcategoria(ncm1);
-  const sub2 = obterSubcategoria(ncm2);
-
-  // Se ambos têm subcategoria definida, devem ser iguais
-  if (sub1 && sub2) {
-    return sub1 === sub2;
-  }
-
-  // Se apenas um tem subcategoria, não são compatíveis
-  if (sub1 || sub2) {
-    return false;
-  }
-
-  // Se nenhum tem subcategoria definida, permitir (mesmo capítulo)
-  return true;
-}
-
-/**
- * Lista de NCMs que NUNCA devem ser sugeridos como destino.
- * São NCMs com regímenes especiais ou que causariam distorções.
- */
-const NCM_BLOQUEADOS: string[] = [
-  "22011000", // Água mineral com gás
-  "22019000", // Água mineral sem gás
-  "22021000", // Água com gás artificial
-  "22029900", // Outras águas
-];
-
-/**
- * Função principal de sugestão de NCM alternativo.
+ * FUNÇÃO PRINCIPAL: Analisa produto pelo NOME e sugere NCM.
  *
- * REGRAS ESTritas:
- * 1. Só sugere NCMs da MESMA subcategoria exata
- * 2. Combos/kits NUNCA recebem sugestão
- * 3. NCMs bloqueados NUNCA são sugeridos
- * 4. Só melhoria real (redução de imposto sem trocar categoria)
- * 5. Prioriza NCMs sem ST quando possível
+ * FLUXO:
+ * 1. Lê o nome do produto
+ * 2. Identifica o tipo de produto (cerveja, destilado, etc.)
+ * 3. Busca o NCM correto para esse tipo
+ * 4. Compara com o NCM atual
+ * 5. Se o NCM atual estiver errado, sugere o correto
+ * 6. Se o NCM atual estiver correto, busca alternativa mais barata
  *
- * @param ncmAtual - Código NCM atual do produto
- * @param descricaoProduto - Descrição do produto
+ * @param ncmAtual - NCM atual cadastrado no produto
+ * @param nomeProduto - Nome do produto
  * @param grupoProduto - Grupo do produto
  * @returns NCM sugerido ou null
  */
 export function sugerirNCMAlternativo(
   ncmAtual: string,
-  descricaoProduto: string,
+  nomeProduto: string,
   grupoProduto?: string
 ): NCMEntrada | null {
   const ncmFormatado = ncmAtual.replace(/\D/g, '');
-  const ncmAtualInfo = buscarNCMporCodigo(ncmFormatado);
-
-  if (!ncmAtualInfo) {
-    return null;
-  }
+  const nomeUpper = nomeProduto.toUpperCase();
 
   // BLOQUEIO 1: Combos/kits
-  if (ehCombo(descricaoProduto, grupoProduto || ncmAtualInfo.grupo)) {
+  if (ehCombo(nomeProduto, grupoProduto || "")) {
     return null;
   }
 
-  const subcatAtual = obterSubcategoria(ncmFormatado);
+  // PASSO 1: Identificar o que é o produto pelo nome
+  const identificacao = identificarNCMPorNome(nomeProduto);
 
-  // BLOQUEIO 2: Se não tem subcategoria mapeada, não sugerir
-  if (!subcatAtual) {
+  if (!identificacao) {
+    // Não conseguiu identificar o produto pelo nome
     return null;
   }
 
-  // Buscar NCMs do mesmo grupo
-  const grupo = ncmAtualInfo.grupo;
-  const ncmGrupo = buscarNCMsPorGrupo(grupo);
+  // PASSO 2: O NCM atual está correto para esse tipo de produto?
+  if (ncmFormatado === identificacao.ncm) {
+    // NCM atual já é o correto para esse produto
+    // Buscar alternativa mais barata na mesma categoria
+    const alternativas = buscarNCMsNaMesmaCategoria(identificacao.categoria, ncmFormatado);
 
-  // Filtrar candidatos válidos
-  const candidatos = ncmGrupo.filter((ncm) => {
-    // Não pode ser o mesmo NCM
-    if (ncm.codigo === ncmFormatado) return false;
+    const melhor = alternativas.find((alt) => {
+      // Deve ter menor imposto
+      const temMelhoria = alt.aliquotaICMS < buscarNCMporCodigo(ncmFormatado)?.aliquotaICMS! ||
+                          alt.aliquotaIPI < buscarNCMporCodigo(ncmFormatado)?.aliquotaIPI!;
+      // Não pode ter ST se o original não tem
+      const naoAdicionaST = !alt.stObrigatorio || buscarNCMporCodigo(ncmFormatado)?.stObrigatorio;
+      return temMelhoria && naoAdicionaST;
+    });
 
-    // BLOQUEIO 3: NCMs na lista de bloqueados
-    if (NCM_BLOQUEADOS.includes(ncm.codigo)) return false;
+    return melhor || null;
+  }
 
-    // BLOQUEIO 4: Mesma subcategoria EXATA
-    if (!mesmaSubcategoria(ncmFormatado, ncm.codigo)) return false;
+  // PASSO 3: NCM atual está ERRADO para esse produto
+  // Verificar se o NCM sugerido é válido
+  const ncmSugeridoInfo = buscarNCMporCodigo(identificacao.ncm);
 
-    // BLOQUEIO 5: Só considerar se há melhoria real
-    const temMelhoriaICMS = ncm.aliquotaICMS < ncmAtualInfo.aliquotaICMS;
-    const temMelhoriaIPI = ncm.aliquotaIPI < ncmAtualInfo.aliquotaIPI;
-    const removeST = ncmAtualInfo.stObrigatorio && !ncm.stObrigatorio;
-
-    // Deve ter pelo menos uma melhoria
-    if (!temMelhoriaICMS && !temMelhoriaIPI && !removeST) {
-      return false;
-    }
-
-    // Se tem ST no candidato mas não no atual, não sugerir (aumenta custo)
-    if (!ncmAtualInfo.stObrigatorio && ncm.stObrigatorio) {
-      return false;
-    }
-
-    return true;
-  });
-
-  if (candidatos.length === 0) {
+  if (!ncmSugeridoInfo) {
     return null;
   }
 
-  // Ordenar por melhor benefício
-  candidatos.sort((a, b) => {
-    // 1. Priorizar sem ST
-    if (a.stObrigatorio !== b.stObrigatorio) {
-      return a.stObrigatorio ? 1 : -1;
+  // Se o NCM atual é de uma categoria diferente, o correto é o sugerido
+  // Mas só retornar se houver benefício (mesmo imposto ou menor)
+  const ncmAtualInfo = buscarNCMporCodigo(ncmFormatado);
+
+  if (ncmAtualInfo) {
+    // Se o NCM sugerido tem imposto MAIOR, não sugerir (manter o atual)
+    if (ncmSugeridoInfo.aliquotaICMS > ncmAtualInfo.aliquotaICMS) {
+      return null;
     }
-
-    // 2. Menor ICMS
-    if (a.aliquotaICMS !== b.aliquotaICMS) {
-      return a.aliquotaICMS - b.aliquotaICMS;
+    if (ncmSugeridoInfo.aliquotaIPI > ncmAtualInfo.aliquotaIPI) {
+      return null;
     }
+    // Se o NCM sugerido tem ST e o atual não, não sugerir
+    if (ncmSugeridoInfo.stObrigatorio && !ncmAtualInfo.stObrigatorio) {
+      return null;
+    }
+  }
 
-    // 3. Menor IPI
-    return a.aliquotaIPI - b.aliquotaIPI;
-  });
-
-  return candidatos[0];
+  return ncmSugeridoInfo;
 }
 
 // =============================================================================
