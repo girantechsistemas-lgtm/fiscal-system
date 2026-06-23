@@ -37,11 +37,10 @@ function Sidebar() {
       <nav className="flex-1 p-4 space-y-1">
         <NavItem href="/" icon="📊" label="Dashboard" />
         <NavItem href="/importar" icon="📤" label="Importar XML" />
+        <NavItem href="/analise-ncm" icon="🔍" label="Analise NCM" />
         <NavItem href="/produtos" icon="📦" label="Produtos" />
-        <NavItem href="/entradas" icon="📥" label="Notas de Entrada" />
-        <NavItem href="/simulador" icon="🧮" label="Simulador de Regime" />
-        <NavItem href="/relatorios" icon="📈" label="Relatórios" />
-        <NavItem href="/configuracoes" icon="⚙️" label="Configurações" />
+        <NavItem href="/simulador" icon="🧮" label="Simulador" />
+        <NavItem href="/relatorios" icon="📈" label="Relatorios" />
       </nav>
       <div className="p-4 border-t border-[var(--border)]">
         <div className="text-xs text-[var(--muted)]">
