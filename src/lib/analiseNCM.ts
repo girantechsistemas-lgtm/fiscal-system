@@ -1252,13 +1252,110 @@ export function calcularEconomiaAnual(economiaMensal: number): number {
 // =============================================================================
 
 /**
+ * Verifica se um produto é um combo/kit (múltiplos itens).
+ * Combos não devem ter NCM sugerido automaticamente pois:
+ * 1. Contém itens de categorias diferentes (alcoólicos + não-alcoólicos)
+ * 2. Necessitam de análise fiscal especializada
+ * 3. Podem ter tratamento tributário específico
+ *
+ * @param nomeProduto - Nome do produto
+ * @param grupoProduto - Grupo do produto
+ * @returns true se for combo/kit
+ */
+function ehCombo(nomeProduto: string, grupoProduto: string): boolean {
+  const nomeUpper = nomeProduto.toUpperCase();
+  const grupoUpper = grupoProduto.toUpperCase();
+
+  // Verificar pelo nome
+  if (nomeUpper.includes("COMBO") || nomeUpper.includes("KIT") || nomeUpper.includes("PACOTE")) {
+    return true;
+  }
+
+  // Verificar pelo grupo
+  if (grupoUpper.includes("COMBO") || grupoUpper.includes("KIT")) {
+    return true;
+  }
+
+  // Verificar padrões de combo (ex: "6 DOSES", "2 DOSES")
+  if (nomeUpper.match(/\d+\s*DOSES/)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Verifica se dois NCMs são compatíveis para substituição.
+ * Regras de validação:
+ * 1. Mesmo capítulo (2 primeiros dígitos)
+ * 2. Mesma posição (4 primeiros dígitos) para produtos similares
+ * 3. Não pode trocar alcoólico por não-alcoólico ou vice-versa
+ * 4. Não pode trocar produto de limpeza por alimento
+ *
+ * @param ncmAtual - Código NCM atual
+ * @param ncmCandidato - Código NCM candidato
+ * @returns true se compatível, false se incompatível
+ */
+function validarCompatibilidadeNCM(ncmAtual: string, ncmCandidato: string): boolean {
+  const capAtual = ncmAtual.substring(0, 2);
+  const capCandidato = ncmCandidato.substring(0, 2);
+  const posAtual = ncmAtual.substring(0, 4);
+  const posCandidato = ncmCandidato.substring(0, 4);
+
+  // Regra 1: Mesmo capítulo é obrigatório
+  if (capAtual !== capCandidato) {
+    return false;
+  }
+
+  // Regra 2: Capítulo 22 (Bebidas) - validação específica
+  if (capAtual === "22") {
+    // Bebidas alcoólicas (2203-2208) NÃO podem virar não-alcoólicas (2201-2202)
+    const ehAlcoolicAtual = posAtual >= "2203" && posAtual <= "2208";
+    const ehAlcoolicCandidato = posCandidato >= "2203" && posCandidato <= "2208";
+
+    if (ehAlcoolicAtual !== ehAlcoolicCandidato) {
+      return false;
+    }
+
+    // Cerveja (2203) não pode virar vinho (2204) e vice-versa
+    if (posAtual.substring(0, 3) !== posCandidato.substring(0, 3)) {
+      return false;
+    }
+  }
+
+  // Regra 3: Capítulo 02 (Carnes) - mesma posição
+  if (capAtual === "02") {
+    if (posAtual.substring(0, 3) !== posCandidato.substring(0, 3)) {
+      return false;
+    }
+  }
+
+  // Regra 4: Capítulo 04 (Laticínios) - mesma posição
+  if (capAtual === "04") {
+    if (posAtual.substring(0, 3) !== posCandidato.substring(0, 3)) {
+      return false;
+    }
+  }
+
+  // Regra 5: Capítulo 34 (Limpeza) - mesma posição
+  if (capAtual === "34") {
+    if (posAtual.substring(0, 3) !== posCandidato.substring(0, 3)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/**
  * Sugere um NCM alternativo com menor carga tributária.
  *
  * Lógica de sugestão:
  * 1. Busca NCMs no mesmo grupo com alíquota ICMS/IPI menor
- * 2. Verifica se o NCM sugerido tem ST obrigatório (pode aumentar custo)
- * 3. Calcula risco baseado na similaridade dos capítulos NCM
- * 4. Prioriza NCMs de mesmo capítulo (menor risco)
+ * 2. Valida compatibilidade entre NCMs (não pode trocar类别)
+ * 3. Verifica se o NCM sugerido tem ST obrigatório
+ * 4. Calcula risco baseado na similaridade dos capítulos NCM
+ * 5. Prioriza NCMs de mesmo capítulo (menor risco)
  *
  * @param ncmAtual - Código NCM atual do produto
  * @param descricaoProduto - Descrição do produto para matching semântico
@@ -1266,7 +1363,8 @@ export function calcularEconomiaAnual(economiaMensal: number): number {
  */
 export function sugerirNCMAlternativo(
   ncmAtual: string,
-  descricaoProduto: string
+  descricaoProduto: string,
+  grupoProduto?: string
 ): NCMEntrada | null {
   const ncmAtualFormatado = ncmAtual.replace(/\D/g, '');
   const ncmAtualEntrada = buscarNCMporCodigo(ncmAtualFormatado);
@@ -1275,13 +1373,23 @@ export function sugerirNCMAlternativo(
     return null;
   }
 
-  const grupoProduto = ncmAtualEntrada.grupo;
-  const ncmGrupo = buscarNCMsPorGrupo(grupoProduto);
+  // REGRA: Combos/kits não devem ter NCM sugerido automaticamente
+  if (ehCombo(descricaoProduto, grupoProduto || ncmAtualEntrada.grupo)) {
+    return null;
+  }
+
+  const grupo = ncmAtualEntrada.grupo;
+  const ncmGrupo = buscarNCMsPorGrupo(grupo);
 
   // Filtra NCMs com alíquota ICMS menor
   const candidatos = ncmGrupo.filter((ncm) => {
     // Deve ser diferente do NCM atual
     if (ncm.codigo === ncmAtualFormatado) return false;
+
+    // VALIDAÇÃO CRÍTICA: Verificar compatibilidade entre NCMs
+    if (!validarCompatibilidadeNCM(ncmAtualFormatado, ncm.codigo)) {
+      return false;
+    }
 
     // Alíquota ICMS menor (sem considerar ST)
     const icmsAtual = ncmAtualEntrada.aliquotaICMS;
@@ -1369,7 +1477,7 @@ export function analisarProdutos(
       continue;
     }
 
-    const ncmSugerido = sugerirNCMAlternativo(produto.ncm, produto.nome);
+    const ncmSugerido = sugerirNCMAlternativo(produto.ncm, produto.nome, produto.grupo);
 
     if (!ncmSugerido) {
       resultados.push({
