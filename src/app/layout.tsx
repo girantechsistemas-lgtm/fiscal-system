@@ -36,6 +36,7 @@ function Sidebar() {
       </div>
       <nav className="flex-1 p-4 space-y-1">
         <NavItem href="/" icon="📊" label="Dashboard" />
+        <NavItem href="/importar" icon="📤" label="Importar XML" />
         <NavItem href="/produtos" icon="📦" label="Produtos" />
         <NavItem href="/entradas" icon="📥" label="Notas de Entrada" />
         <NavItem href="/simulador" icon="🧮" label="Simulador de Regime" />
