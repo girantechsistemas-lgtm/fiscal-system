@@ -16,8 +16,8 @@ export default function RootLayout({
       <body>
         <div className="flex min-h-screen">
           <Sidebar />
-          <main className="flex-1 ml-64 p-6">
-            {children}
+          <main className="flex-1 ml-56 p-8 bg-[#f8fafc]">
+            <div className="max-w-6xl mx-auto">{children}</div>
           </main>
         </div>
       </body>
@@ -27,38 +27,56 @@ export default function RootLayout({
 
 function Sidebar() {
   return (
-    <aside className="fixed left-0 top-0 h-full w-64 bg-white border-r border-[var(--border)] flex flex-col">
-      <div className="p-6 border-b border-[var(--border)]">
-        <h1 className="text-xl font-bold text-[var(--primary)]">
-          FiscalZim
-        </h1>
-        <p className="text-xs text-[var(--muted)] mt-1">Planejamento Tributário</p>
+    <aside className="fixed left-0 top-0 h-full w-56 bg-white border-r border-gray-200 flex flex-col">
+      <div className="px-6 py-5">
+        <h1 className="text-lg font-bold text-blue-600">FiscalZim</h1>
       </div>
-      <nav className="flex-1 p-4 space-y-1">
-        <NavItem href="/" icon="📊" label="Dashboard" />
-        <NavItem href="/importar" icon="📤" label="Importar XML" />
-        <NavItem href="/analise-ncm" icon="🔍" label="Analise NCM" />
-        <NavItem href="/produtos" icon="📦" label="Produtos" />
-        <NavItem href="/simulador" icon="🧮" label="Simulador" />
-        <NavItem href="/relatorios" icon="📈" label="Relatorios" />
+
+      <nav className="flex-1 px-3 py-2">
+        <NavItem href="/" label="Dashboard" active />
+        <NavItem href="/importar" label="Importar XML" />
+        <NavItem href="/analise-ncm" label="Analise NCM" />
+        <NavItem href="/produtos" label="Produtos" />
+        <NavItem href="/simulador" label="Simulador" />
       </nav>
-      <div className="p-4 border-t border-[var(--border)]">
-        <div className="text-xs text-[var(--muted)]">
-          Plano: <span className="font-semibold text-[var(--primary)]">Starter</span>
-        </div>
+
+      <div className="px-6 py-4 border-t border-gray-100">
+        <span className="text-xs text-gray-400">v1.0</span>
       </div>
     </aside>
   );
 }
 
-function NavItem({ href, icon, label }: { href: string; icon: string; label: string }) {
+function NavItem({
+  href,
+  label,
+  active = false,
+}: {
+  href: string;
+  label: string;
+  active?: boolean;
+}) {
   return (
     <a
       href={href}
-      className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-blue-50 text-sm transition-colors"
+      className={`group flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-all duration-200 ${
+        active
+          ? "text-blue-600 bg-blue-50 border-l-2 border-blue-600 -ml-0.5"
+          : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+      }`}
     >
-      <span>{icon}</span>
       <span>{label}</span>
+      <svg
+        className={`w-4 h-4 opacity-0 -translate-x-1 transition-all duration-200 group-hover:opacity-100 group-hover:translate-x-0 ${
+          active ? "text-blue-600" : "text-gray-400"
+        }`}
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        strokeWidth={2}
+      >
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+      </svg>
     </a>
   );
 }

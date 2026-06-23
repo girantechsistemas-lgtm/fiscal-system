@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import clienteData from "@/data/cliente_gourmet.json";
 import {
   analisarProdutos,
@@ -22,18 +22,16 @@ interface Produto {
   st_pauta: number;
 }
 
-const ITENS_POR_PAGINA = 20;
+const ITENS_POR_PAGINA = 15;
+
+function formatarMoeda(valor: number): string {
+  return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
 
 export default function AnaliseNCMPage() {
   const produtos = clienteData.produtos as Produto[];
-  const [resultados, setResultados] = useState<AnaliseNCM[]>([]);
-  const [carregando, setCarregando] = useState(true);
-  const [busca, setBusca] = useState("");
-  const [pagina, setPagina] = useState(1);
-  const [produtoSelecionado, setProdutoSelecionado] = useState<AnaliseNCM | null>(null);
-  const [ordenacao, setOrdenacao] = useState<"economiaMensal" | "economiaPercentual" | "nivelRisco">("economiaMensal");
 
-  useEffect(() => {
+  const resultados = useMemo(() => {
     const produtosFormatados = produtos.map((p) => ({
       id: p.id,
       nome: p.nome,
@@ -41,10 +39,13 @@ export default function AnaliseNCMPage() {
       prc_venda: p.prc_venda,
       grupo: p.grupo,
     }));
-    const analise = analisarProdutos(produtosFormatados);
-    setResultados(analise);
-    setCarregando(false);
+    return analisarProdutos(produtosFormatados);
   }, [produtos]);
+
+  const [busca, setBusca] = useState("");
+  const [filtro, setFiltro] = useState<"todos" | "com_sugestao" | "alto_risco">("todos");
+  const [pagina, setPagina] = useState(1);
+  const [linhaExpandida, setLinhaExpandida] = useState<number | null>(null);
 
   const resultadosFiltrados = useMemo(() => {
     let filtrados = resultados;
@@ -59,13 +60,14 @@ export default function AnaliseNCMPage() {
       );
     }
 
-    return [...filtrados].sort((a, b) => {
-      if (ordenacao === "economiaMensal") return b.economiaMensal - a.economiaMensal;
-      if (ordenacao === "economiaPercentual") return b.economiaPercentual - a.economiaPercentual;
-      const riscoOrdem: Record<string, number> = { alto: 3, medio: 2, baixo: 1 };
-      return riscoOrdem[b.nivelRisco] - riscoOrdem[a.nivelRisco];
-    });
-  }, [resultados, busca, ordenacao]);
+    if (filtro === "com_sugestao") {
+      filtrados = filtrados.filter((r) => r.ncmSugerido !== null);
+    } else if (filtro === "alto_risco") {
+      filtrados = filtrados.filter((r) => r.nivelRisco === "alto");
+    }
+
+    return [...filtrados].sort((a, b) => b.economiaMensal - a.economiaMensal);
+  }, [resultados, busca, filtro]);
 
   const totalPaginas = Math.ceil(resultadosFiltrados.length / ITENS_POR_PAGINA);
   const itensPagina = resultadosFiltrados.slice(
@@ -75,13 +77,14 @@ export default function AnaliseNCMPage() {
 
   const totalProdutos = resultados.length;
   const produtosComSugestao = resultados.filter((r) => r.ncmSugerido !== null).length;
+  const percentualSugestao = totalProdutos > 0 ? ((produtosComSugestao / totalProdutos) * 100).toFixed(1) : "0";
   const economiaMensalTotal = resultados.reduce((acc, r) => acc + r.economiaMensal, 0);
   const economiaAnualTotal = calcularEconomiaAnual(economiaMensalTotal);
 
-  const top10 = [...resultados]
+  const top5 = [...resultados]
     .filter((r) => r.economiaMensal > 0)
     .sort((a, b) => b.economiaMensal - a.economiaMensal)
-    .slice(0, 10);
+    .slice(0, 5);
 
   const contagemRisco = {
     baixo: resultados.filter((r) => r.nivelRisco === "baixo").length,
@@ -103,74 +106,63 @@ export default function AnaliseNCMPage() {
       .slice(0, 10);
   }, [resultados, produtos]);
 
-  function exportarRelatorio() {
-    const relatorio = {
-      dataGeracao: new Date().toISOString(),
-      empresa: clienteData.empresa,
-      resumo: {
-        totalProdutos,
-        produtosComSugestao,
-        economiaMensalTotal,
-        economiaAnualTotal,
-      },
-      resultados,
-    };
-    const blob = new Blob([JSON.stringify(relatorio, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `relatorio-ncm-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  function formatarMoeda(valor: number): string {
-    return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-  }
-
-  if (carregando) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-500">Analisando produtos...</p>
-        </div>
-      </div>
-    );
+  function toggleLinha(id: number) {
+    setLinhaExpandida(linhaExpandida === id ? null : id);
   }
 
   return (
-    <div className="max-w-[1400px] mx-auto">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Analise de NCM - Otimizacao Tributaria</h1>
-        <p className="text-sm text-gray-500 mt-1">Identificacao de produtos com potencial de economia</p>
+    <div className="max-w-[1400px] mx-auto space-y-6">
+      {/* Page Header */}
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900">Analise de NCM</h1>
+        <p className="text-sm text-gray-500 mt-1">
+          Identificacao de produtos com potencial de economia tributaria
+        </p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <SummaryCard titulo="Produtos Analisados" valor={String(totalProdutos)} subtitulo="Total na base" cor="blue" />
-        <SummaryCard titulo="Com Sugestao" valor={String(produtosComSugestao)} subtitulo={`${totalProdutos > 0 ? ((produtosComSugestao / totalProdutos) * 100).toFixed(1) : 0}% do total`} cor="green" />
-        <SummaryCard titulo="Economia Mensal" valor={formatarMoeda(economiaMensalTotal)} subtitulo="Estimativa" cor="emerald" />
-        <SummaryCard titulo="Economia Anual" valor={formatarMoeda(economiaAnualTotal)} subtitulo="Projeção 12 meses" cor="purple" />
+      {/* Section 1: Summary Metrics */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <p className="text-sm text-gray-500">Produtos Analisados</p>
+          <p className="text-2xl font-bold text-gray-900 mt-1">{totalProdutos}</p>
+        </div>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <p className="text-sm text-gray-500">Com Sugestao</p>
+          <p className="text-2xl font-bold text-gray-900 mt-1">{produtosComSugestao}</p>
+          <p className="text-xs text-gray-400 mt-1">{percentualSugestao}% do total</p>
+        </div>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <p className="text-sm text-gray-500">Economia Mensal</p>
+          <p className="text-2xl font-bold text-green-600 mt-1">{formatarMoeda(economiaMensalTotal)}</p>
+        </div>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <p className="text-sm text-gray-500">Economia Anual</p>
+          <p className="text-2xl font-bold text-green-600 mt-1">{formatarMoeda(economiaAnualTotal)}</p>
+        </div>
       </div>
 
+      {/* Main content with sidebar */}
       <div className="flex flex-col lg:flex-row gap-6">
-        <div className="flex-1 min-w-0">
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
-              <h2 className="font-semibold text-gray-900">Produtos com Sugestao de Alteracao</h2>
-              <div className="flex items-center gap-2">
-                <select
-                  value={ordenacao}
-                  onChange={(e) => {
-                    setOrdenacao(e.target.value as typeof ordenacao);
-                    setPagina(1);
-                  }}
-                  className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+        {/* Left column: Filter + Table */}
+        <div className="flex-1 min-w-0 space-y-4">
+          {/* Section 2: Filter Bar */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+              {/* Search input */}
+              <div className="relative flex-1 w-full">
+                <svg
+                  className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
                 >
-                  <option value="economiaMensal">Maior Economia Mensal</option>
-                  <option value="economiaPercentual">Maior Economia %</option>
-                  <option value="nivelRisco">Maior Risco</option>
-                </select>
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                  />
+                </svg>
                 <input
                   type="text"
                   placeholder="Buscar por nome ou NCM..."
@@ -179,75 +171,116 @@ export default function AnaliseNCMPage() {
                     setBusca(e.target.value);
                     setPagina(1);
                   }}
-                  className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 w-56"
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                 />
               </div>
+              {/* Filter pills */}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { setFiltro("todos"); setPagina(1); }}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    filtro === "todos"
+                      ? "bg-blue-600 text-white"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  }`}
+                >
+                  Todos
+                </button>
+                <button
+                  onClick={() => { setFiltro("com_sugestao"); setPagina(1); }}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    filtro === "com_sugestao"
+                      ? "bg-blue-600 text-white"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  }`}
+                >
+                  Com Sugestao
+                </button>
+                <button
+                  onClick={() => { setFiltro("alto_risco"); setPagina(1); }}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    filtro === "alto_risco"
+                      ? "bg-blue-600 text-white"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  }`}
+                >
+                  Alto Risco
+                </button>
+              </div>
             </div>
+          </div>
 
+          {/* Section 3: Main Table */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="text-left py-2.5 px-2 font-medium text-gray-600">ID</th>
-                    <th className="text-left py-2.5 px-2 font-medium text-gray-600">Produto</th>
-                    <th className="text-left py-2.5 px-2 font-medium text-gray-600">NCM Atual</th>
-                    <th className="text-left py-2.5 px-2 font-medium text-gray-600">NCM Sugerido</th>
-                    <th className="text-right py-2.5 px-2 font-medium text-gray-600">Aliq. Atual</th>
-                    <th className="text-right py-2.5 px-2 font-medium text-gray-600">Aliq. Sugerida</th>
-                    <th className="text-right py-2.5 px-2 font-medium text-gray-600">Economia %</th>
-                    <th className="text-center py-2.5 px-2 font-medium text-gray-600">Risco</th>
-                    <th className="text-right py-2.5 px-2 font-medium text-gray-600">Economia Mensal</th>
+                  <tr className="bg-gray-50 text-xs font-medium text-gray-500 uppercase">
+                    <th className="text-left py-3 px-4 rounded-l-lg">Produto</th>
+                    <th className="text-left py-3 px-4">NCM Atual</th>
+                    <th className="text-left py-3 px-4">NCM Sugerida</th>
+                    <th className="text-right py-3 px-4">Aliq Atual</th>
+                    <th className="text-right py-3 px-4">Aliq Sugerida</th>
+                    <th className="text-right py-3 px-4">Economia</th>
+                    <th className="text-center py-3 px-4 rounded-r-lg">Risco</th>
                   </tr>
                 </thead>
                 <tbody>
                   {itensPagina.map((r) => (
-                    <tr
-                      key={r.produtoId}
-                      onClick={() => setProdutoSelecionado(r)}
-                      className={`border-b border-gray-100 cursor-pointer transition-colors ${
-                        r.ncmSugerido ? "bg-green-50/50 hover:bg-green-100/70" : "hover:bg-gray-50"
-                      } ${produtoSelecionado?.produtoId === r.produtoId ? "ring-2 ring-blue-500" : ""}`}
-                    >
-                      <td className="py-2.5 px-2 text-gray-500">{r.produtoId}</td>
-                      <td className="py-2.5 px-2 font-medium text-gray-900 max-w-[200px] truncate">{r.nomeProduto}</td>
-                      <td className="py-2.5 px-2 text-gray-600 font-mono text-xs">{r.ncmAtual}</td>
-                      <td className="py-2.5 px-2 font-mono text-xs">
-                        {r.ncmSugerido ? (
-                          <span className="text-blue-600">{r.ncmSugerido}</span>
-                        ) : (
-                          <span className="text-gray-400">-</span>
-                        )}
-                      </td>
-                      <td className="py-2.5 px-2 text-right text-gray-600">{r.aliquotaAtual}%</td>
-                      <td className="py-2.5 px-2 text-right">
-                        {r.ncmSugerido ? (
-                          <span className="text-blue-600">{r.aliquotaSugerida}%</span>
-                        ) : (
-                          <span className="text-gray-400">-</span>
-                        )}
-                      </td>
-                      <td className="py-2.5 px-2 text-right">
-                        {r.economiaPercentual > 0 ? (
-                          <span className="text-green-600 font-medium">{r.economiaPercentual.toFixed(1)}%</span>
-                        ) : (
-                          <span className="text-gray-400">-</span>
-                        )}
-                      </td>
-                      <td className="py-2.5 px-2 text-center">
-                        <RiskBadge nivel={r.nivelRisco} />
-                      </td>
-                      <td className="py-2.5 px-2 text-right font-medium">
-                        {r.economiaMensal > 0 ? (
-                          <span className="text-green-700">{formatarMoeda(r.economiaMensal)}</span>
-                        ) : (
-                          <span className="text-gray-400">-</span>
-                        )}
-                      </td>
-                    </tr>
+                    <>
+                      <tr
+                        key={r.produtoId}
+                        onClick={() => toggleLinha(r.produtoId)}
+                        className="border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition-colors"
+                      >
+                        <td className="py-3 px-4 font-medium text-gray-900 max-w-[200px] truncate">
+                          {r.nomeProduto}
+                        </td>
+                        <td className="py-3 px-4 text-gray-600 font-mono text-xs">
+                          {r.ncmAtual}
+                        </td>
+                        <td className="py-3 px-4 font-mono text-xs">
+                          {r.ncmSugerido ? (
+                            <span className="text-blue-600">{r.ncmSugerido}</span>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-right text-gray-600">
+                          {r.aliquotaAtual}%
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          {r.ncmSugerido ? (
+                            <span className="text-blue-600">{r.aliquotaSugerida}%</span>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          {r.economiaMensal > 0 ? (
+                            <span className="text-green-600 font-medium">
+                              {formatarMoeda(r.economiaMensal)}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <RiscoBadge nivel={r.nivelRisco} />
+                        </td>
+                      </tr>
+                      {linhaExpandida === r.produtoId && (
+                        <tr key={`${r.produtoId}-detail`}>
+                          <td colSpan={7} className="p-0">
+                            <DetalheExpandido resultado={r} onFechar={() => setLinhaExpandida(null)} />
+                          </td>
+                        </tr>
+                      )}
+                    </>
                   ))}
                   {itensPagina.length === 0 && (
                     <tr>
-                      <td colSpan={9} className="py-8 text-center text-gray-400">
+                      <td colSpan={7} className="py-12 text-center text-gray-400">
                         Nenhum resultado encontrado
                       </td>
                     </tr>
@@ -256,8 +289,9 @@ export default function AnaliseNCMPage() {
               </table>
             </div>
 
+            {/* Pagination */}
             {totalPaginas > 1 && (
-              <div className="flex justify-between items-center mt-4 pt-3 border-t border-gray-200">
+              <div className="flex justify-between items-center mt-6 pt-4 border-t border-gray-100">
                 <span className="text-sm text-gray-500">
                   {resultadosFiltrados.length} resultados - Pagina {pagina} de {totalPaginas}
                 </span>
@@ -265,7 +299,7 @@ export default function AnaliseNCMPage() {
                   <button
                     onClick={() => setPagina((p) => Math.max(1, p - 1))}
                     disabled={pagina === 1}
-                    className="px-3 py-1 text-sm border border-gray-300 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50"
+                    className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50"
                   >
                     Anterior
                   </button>
@@ -284,7 +318,7 @@ export default function AnaliseNCMPage() {
                       <button
                         key={num}
                         onClick={() => setPagina(num)}
-                        className={`px-3 py-1 text-sm rounded-lg ${
+                        className={`px-3 py-1.5 text-sm rounded-lg ${
                           num === pagina
                             ? "bg-blue-600 text-white"
                             : "border border-gray-300 hover:bg-gray-50"
@@ -297,7 +331,7 @@ export default function AnaliseNCMPage() {
                   <button
                     onClick={() => setPagina((p) => Math.min(totalPaginas, p + 1))}
                     disabled={pagina === totalPaginas}
-                    className="px-3 py-1 text-sm border border-gray-300 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50"
+                    className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50"
                   >
                     Proxima
                   </button>
@@ -307,25 +341,29 @@ export default function AnaliseNCMPage() {
           </div>
         </div>
 
+        {/* Section 5: Right Sidebar */}
         <div className="w-full lg:w-80 flex-shrink-0 space-y-4">
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <h3 className="font-semibold text-gray-900 mb-3">Top 10 Maiores Economias</h3>
-            <div className="space-y-2">
-              {top10.length === 0 && (
+          {/* Top 5 Maiores Economias */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <h3 className="text-sm font-semibold text-gray-900 mb-4">Top 5 Maiores Economias</h3>
+            <div className="space-y-3">
+              {top5.length === 0 && (
                 <p className="text-sm text-gray-400">Nenhuma economia identificada</p>
               )}
-              {top10.map((r, i) => (
+              {top5.map((r, i) => (
                 <div
                   key={r.produtoId}
-                  onClick={() => setProdutoSelecionado(r)}
+                  onClick={() => toggleLinha(r.produtoId)}
                   className="flex items-start gap-2 p-2 rounded-lg hover:bg-gray-50 cursor-pointer"
                 >
                   <span className="text-xs font-bold text-gray-400 mt-0.5 w-4">{i + 1}.</span>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-900 truncate">{r.nomeProduto}</p>
-                    <p className="text-xs text-gray-500">{r.ncmAtual} {r.ncmSugerido ? `> ${r.ncmSugerido}` : ""}</p>
+                    <p className="text-xs text-gray-500">
+                      {r.ncmAtual} {r.ncmSugerido ? `> ${r.ncmSugerido}` : ""}
+                    </p>
                   </div>
-                  <span className="text-sm font-semibold text-green-700 whitespace-nowrap">
+                  <span className="text-sm font-semibold text-green-600 whitespace-nowrap">
                     {formatarMoeda(r.economiaMensal)}
                   </span>
                 </div>
@@ -333,17 +371,34 @@ export default function AnaliseNCMPage() {
             </div>
           </div>
 
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <h3 className="font-semibold text-gray-900 mb-3">Produtos por Nivel de Risco</h3>
+          {/* Por Nivel de Risco */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <h3 className="text-sm font-semibold text-gray-900 mb-4">Por Nivel de Risco</h3>
             <div className="space-y-3">
-              <RiskRow label="Baixo" count={contagemRisco.baixo} total={totalProdutos} cor="green" />
-              <RiskRow label="Medio" count={contagemRisco.medio} total={totalProdutos} cor="yellow" />
-              <RiskRow label="Alto" count={contagemRisco.alto} total={totalProdutos} cor="red" />
+              <BarraRisco
+                label="Baixo"
+                count={contagemRisco.baixo}
+                total={totalProdutos}
+                cor="bg-green-500"
+              />
+              <BarraRisco
+                label="Medio"
+                count={contagemRisco.medio}
+                total={totalProdutos}
+                cor="bg-yellow-500"
+              />
+              <BarraRisco
+                label="Alto"
+                count={contagemRisco.alto}
+                total={totalProdutos}
+                cor="bg-red-500"
+              />
             </div>
           </div>
 
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <h3 className="font-semibold text-gray-900 mb-3">Resumo por Grupo</h3>
+          {/* Por Grupo */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <h3 className="text-sm font-semibold text-gray-900 mb-4">Por Grupo</h3>
             <div className="space-y-2">
               {resumoPorGrupo.map(([grupo, dados]) => (
                 <div key={grupo} className="flex justify-between items-center text-sm">
@@ -351,109 +406,20 @@ export default function AnaliseNCMPage() {
                     <p className="font-medium text-gray-900 truncate">{grupo}</p>
                     <p className="text-xs text-gray-500">{dados.total} produtos</p>
                   </div>
-                  <span className="text-sm font-semibold text-green-700 whitespace-nowrap">
+                  <span className="text-sm font-semibold text-green-600 whitespace-nowrap">
                     {formatarMoeda(dados.economia)}
                   </span>
                 </div>
               ))}
             </div>
           </div>
-
-          <button
-            onClick={exportarRelatorio}
-            className="w-full px-4 py-2.5 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors text-sm"
-          >
-            Exportar Relatorio
-          </button>
         </div>
       </div>
-
-      {produtoSelecionado && (
-        <div className="mt-6 bg-white rounded-xl border border-gray-200 p-6">
-          <div className="flex justify-between items-start mb-4">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900">{produtoSelecionado.nomeProduto}</h2>
-              <p className="text-sm text-gray-500">Detalhes da analise tributaria</p>
-            </div>
-            <button
-              onClick={() => setProdutoSelecionado(null)}
-              className="text-gray-400 hover:text-gray-600 text-sm"
-            >
-              Fechar
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">NCM Atual</h3>
-              <div className="bg-gray-50 rounded-lg p-4 space-y-2">
-                <DetailRow label="Codigo" valor={produtoSelecionado.ncmAtual} />
-                <DetailRow label="Aliquota ICMS" valor={`${produtoSelecionado.aliquotaAtual}%`} />
-                <DetailRow label="Produto ID" valor={String(produtoSelecionado.produtoId)} />
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">NCM Sugerido</h3>
-              <div className="bg-blue-50 rounded-lg p-4 space-y-2">
-                <DetailRow
-                  label="Codigo"
-                  valor={produtoSelecionado.ncmSugerido || "N/A"}
-                  valorClassName={produtoSelecionado.ncmSugerido ? "text-blue-600 font-semibold" : ""}
-                />
-                <DetailRow label="Aliquota ICMS" valor={`${produtoSelecionado.aliquotaSugerida}%`} />
-                <DetailRow label="Descricao" valor={produtoSelecionado.descricaoNCMSugerido} />
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Impacto Financeiro</h3>
-              <div className="bg-green-50 rounded-lg p-4 space-y-2">
-                <DetailRow label="Economia Mensal" valor={formatarMoeda(produtoSelecionado.economiaMensal)} valorClassName="text-green-700 font-semibold" />
-                <DetailRow label="Economia Anual" valor={formatarMoeda(calcularEconomiaAnual(produtoSelecionado.economiaMensal))} valorClassName="text-green-700 font-semibold" />
-                <DetailRow label="Reducao de Aliquota" valor={`${produtoSelecionado.economiaPercentual.toFixed(1)}%`} />
-                <DetailRow label="Nivel de Risco" valor={produtoSelecionado.nivelRisco.charAt(0).toUpperCase() + produtoSelecionado.nivelRisco.slice(1)} />
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-            <h4 className="text-sm font-semibold text-gray-700 mb-2">Recomendacao</h4>
-            <p className="text-sm text-gray-600 leading-relaxed">{produtoSelecionado.observacao}</p>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
 
-function SummaryCard({
-  titulo,
-  valor,
-  subtitulo,
-  cor,
-}: {
-  titulo: string;
-  valor: string;
-  subtitulo: string;
-  cor: string;
-}) {
-  const cores: Record<string, string> = {
-    blue: "bg-blue-50 border-blue-200",
-    green: "bg-green-50 border-green-200",
-    emerald: "bg-emerald-50 border-emerald-200",
-    purple: "bg-purple-50 border-purple-200",
-  };
-  return (
-    <div className={`rounded-xl border-2 p-4 ${cores[cor] || cores.blue}`}>
-      <div className="text-xs font-medium text-gray-600">{titulo}</div>
-      <div className="text-xl font-bold text-gray-900 mt-1">{valor}</div>
-      <div className="text-xs text-gray-500 mt-0.5">{subtitulo}</div>
-    </div>
-  );
-}
-
-function RiskBadge({ nivel }: { nivel: "baixo" | "medio" | "alto" }) {
+function RiscoBadge({ nivel }: { nivel: "baixo" | "medio" | "alto" }) {
   const estilos: Record<string, string> = {
     baixo: "bg-green-100 text-green-700",
     medio: "bg-yellow-100 text-yellow-700",
@@ -465,13 +431,13 @@ function RiskBadge({ nivel }: { nivel: "baixo" | "medio" | "alto" }) {
     alto: "Alto",
   };
   return (
-    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${estilos[nivel]}`}>
+    <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-medium ${estilos[nivel]}`}>
       {labels[nivel]}
     </span>
   );
 }
 
-function RiskRow({
+function BarraRisco({
   label,
   count,
   total,
@@ -482,27 +448,115 @@ function RiskRow({
   total: number;
   cor: string;
 }) {
-  const cores: Record<string, { bg: string; bar: string }> = {
-    green: { bg: "bg-green-50", bar: "bg-green-500" },
-    yellow: { bg: "bg-yellow-50", bar: "bg-yellow-500" },
-    red: { bg: "bg-red-50", bar: "bg-red-500" },
-  };
-  const estilo = cores[cor] || cores.green;
   const percent = total > 0 ? (count / total) * 100 : 0;
   return (
     <div>
       <div className="flex justify-between text-sm mb-1">
         <span className="font-medium text-gray-700">{label}</span>
-        <span className="text-gray-500">{count} ({percent.toFixed(0)}%)</span>
+        <span className="text-gray-500">
+          {count} ({percent.toFixed(0)}%)
+        </span>
       </div>
-      <div className={`h-2 rounded-full ${estilo.bg}`}>
-        <div className={`h-full rounded-full ${estilo.bar}`} style={{ width: `${percent}%` }} />
+      <div className="h-2 rounded-full bg-gray-100">
+        <div className={`h-full rounded-full ${cor}`} style={{ width: `${percent}%` }} />
       </div>
     </div>
   );
 }
 
-function DetailRow({
+function DetalheExpandido({
+  resultado,
+  onFechar,
+}: {
+  resultado: AnaliseNCM;
+  onFechar: () => void;
+}) {
+  const ncmAtualInfo = buscarNCMporCodigo(resultado.ncmAtual.replace(/\D/g, ""));
+  const ncmSugeridoInfo = resultado.ncmSugerido
+    ? buscarNCMporCodigo(resultado.ncmSugerido.replace(/\D/g, ""))
+    : null;
+
+  return (
+    <div className="bg-gray-50 border-t border-b border-gray-100 px-6 py-5">
+      <div className="flex justify-between items-start mb-4">
+        <h4 className="text-sm font-semibold text-gray-900">{resultado.nomeProduto}</h4>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onFechar();
+          }}
+          className="text-gray-400 hover:text-gray-600 p-1"
+        >
+          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* NCM Atual */}
+        <div className="bg-white rounded-lg p-4 border border-gray-200">
+          <h5 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+            NCM Atual
+          </h5>
+          <div className="space-y-2">
+            <DetalheLinha label="Codigo" valor={resultado.ncmAtual} />
+            <DetalheLinha label="Descricao" valor={ncmAtualInfo?.descricao || "N/A"} />
+            <DetalheLinha label="ICMS %" valor={`${resultado.aliquotaAtual}%`} />
+            <DetalheLinha label="IPI %" valor={`${ncmAtualInfo?.aliquotaIPI ?? 0}%`} />
+            <DetalheLinha label="ST" valor={ncmAtualInfo?.stObrigatorio ? "Obrigatorio" : "Nao"} />
+          </div>
+        </div>
+
+        {/* NCM Sugerida */}
+        <div className="bg-white rounded-lg p-4 border border-blue-200">
+          <h5 className="text-xs font-semibold text-blue-600 uppercase tracking-wide mb-3">
+            NCM Sugerida
+          </h5>
+          {ncmSugeridoInfo ? (
+            <div className="space-y-2">
+              <DetalheLinha label="Codigo" valor={resultado.ncmSugerido!} valorClassName="text-blue-600 font-semibold" />
+              <DetalheLinha label="Descricao" valor={ncmSugeridoInfo.descricao} />
+              <DetalheLinha label="ICMS %" valor={`${resultado.aliquotaSugerida}%`} />
+              <DetalheLinha label="IPI %" valor={`${ncmSugeridoInfo.aliquotaIPI}%`} />
+              <DetalheLinha label="ST" valor={ncmSugeridoInfo.stObrigatorio ? "Obrigatorio" : "Nao"} />
+            </div>
+          ) : (
+            <p className="text-sm text-gray-400">Nenhuma sugestao disponivel</p>
+          )}
+        </div>
+      </div>
+
+      {/* Bottom: Recommendation + Risk + Annual Savings */}
+      <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-white rounded-lg p-4 border border-gray-200 md:col-span-2">
+          <h5 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+            Recomendacao
+          </h5>
+          <p className="text-sm text-gray-600 leading-relaxed">{resultado.observacao}</p>
+        </div>
+        <div className="bg-white rounded-lg p-4 border border-gray-200 space-y-2">
+          <DetalheLinha
+            label="Nivel de Risco"
+            valor={resultado.nivelRisco.charAt(0).toUpperCase() + resultado.nivelRisco.slice(1)}
+          />
+          <DetalheLinha
+            label="Economia Mensal"
+            valor={formatarMoeda(resultado.economiaMensal)}
+            valorClassName="text-green-600 font-semibold"
+          />
+          <DetalheLinha
+            label="Economia Anual"
+            valor={formatarMoeda(calcularEconomiaAnual(resultado.economiaMensal))}
+            valorClassName="text-green-600 font-semibold"
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DetalheLinha({
   label,
   valor,
   valorClassName = "",
