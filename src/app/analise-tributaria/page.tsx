@@ -376,7 +376,8 @@ export default function AnaliseTributariaPage() {
           {/* Tabela Sugestoes */}
           {aba === "sugestoes" && (
             <div>
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[900px]">
                 <thead>
                   <tr className="border-b border-gray-200">
                     <th className="text-left py-3 px-3 text-xs font-medium text-gray-500 uppercase">
@@ -471,6 +472,7 @@ export default function AnaliseTributariaPage() {
                   )}
                 </tbody>
               </table>
+              </div>
 
               {/* Detalhe expandido */}
               {expandido &&
@@ -645,7 +647,8 @@ export default function AnaliseTributariaPage() {
 
           {/* Tabela Problemas */}
           {aba === "problemas" && (
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[700px]">
               <thead>
                 <tr className="border-b border-gray-200">
                   <th className="text-left py-3 px-3 text-xs font-medium text-gray-500 uppercase">
@@ -719,6 +722,7 @@ export default function AnaliseTributariaPage() {
                 )}
               </tbody>
             </table>
+            </div>
           )}
 
           {/* Grupos */}
