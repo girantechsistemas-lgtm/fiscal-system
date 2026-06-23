@@ -14,12 +14,10 @@ export default function RootLayout({
   return (
     <html lang="pt-BR">
       <body>
-        <div className="flex min-h-screen">
-          <Sidebar />
-          <main className="flex-1 ml-56 p-6 bg-[#f8fafc] overflow-x-hidden">
-            <div className="w-full">{children}</div>
-          </main>
-        </div>
+        <Sidebar />
+        <main className="ml-56 min-h-screen bg-[#f8fafc] p-6">
+          {children}
+        </main>
       </body>
     </html>
   );
@@ -27,13 +25,13 @@ export default function RootLayout({
 
 function Sidebar() {
   return (
-    <aside className="fixed left-0 top-0 h-full w-56 bg-white border-r border-gray-200 flex flex-col">
+    <aside className="fixed left-0 top-0 h-full w-56 bg-white border-r border-gray-200 flex flex-col z-50">
       <div className="px-6 py-5">
         <h1 className="text-lg font-bold text-blue-600">FiscalZim</h1>
       </div>
 
-      <nav className="flex-1 px-3 py-2">
-        <NavItem href="/" label="Dashboard" active />
+      <nav className="flex-1 px-3 py-2 space-y-1">
+        <NavItem href="/" label="Dashboard" />
         <NavItem href="/importar" label="Importar XML" />
         <NavItem href="/analise-ncm" label="Analise NCM" />
         <NavItem href="/analise-tributaria" label="Analise Tributaria" />
@@ -51,33 +49,16 @@ function Sidebar() {
 function NavItem({
   href,
   label,
-  active = false,
 }: {
   href: string;
   label: string;
-  active?: boolean;
 }) {
   return (
     <a
       href={href}
-      className={`group flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-all duration-200 ${
-        active
-          ? "text-blue-600 bg-blue-50 border-l-2 border-blue-600 -ml-0.5"
-          : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
-      }`}
+      className="block px-3 py-2 rounded-lg text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50 transition-colors"
     >
-      <span>{label}</span>
-      <svg
-        className={`w-4 h-4 opacity-0 -translate-x-1 transition-all duration-200 group-hover:opacity-100 group-hover:translate-x-0 ${
-          active ? "text-blue-600" : "text-gray-400"
-        }`}
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-        strokeWidth={2}
-      >
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-      </svg>
+      {label}
     </a>
   );
 }
