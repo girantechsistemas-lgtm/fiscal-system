@@ -36,6 +36,7 @@ function Sidebar() {
         <NavItem href="/" label="Dashboard" active />
         <NavItem href="/importar" label="Importar XML" />
         <NavItem href="/analise-ncm" label="Analise NCM" />
+        <NavItem href="/analise-tributaria" label="Analise Tributaria" />
         <NavItem href="/produtos" label="Produtos" />
         <NavItem href="/simulador" label="Simulador" />
       </nav>
